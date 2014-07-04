@@ -4,7 +4,8 @@
   "description": "ERROR: No README.md file found!",
   "main": "schedule.js",
   "dependencies": {
-    "request": "~2.36.0"
+    "request": "~2.36.0",
+    "async": "~0.9.0"
   },
   "devDependencies": {},
   "scripts": {
