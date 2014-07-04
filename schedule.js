@@ -9,83 +9,87 @@ var options = {
     }
 };
 
-// Get commit count of a repo
+// Get commit count of a repo of owner
 var getTotalCommits = function(users) {
-  var total = 0;
-  for (var i = 0; i < users.length; i++) {
-    total += users[i]["total"];
+  if (users.length != 1) {
+    return 0;
   }
-  return total;
+  return users.pop()["total"];
 }
 
-req(options, function(error, res, body) {
-  if (!error && res.statusCode == 200) {
-    var data = JSON.parse(body);
-    // Most recent date comes first
-    // This means highest #
-    // aka sorting by DESC
-    data.sort(function(a, b) {
-      var a_lastpush = a["pushed_at"];
-      var b_lastpush = b["pushed_at"];
-      if (a_lastpush > b_lastpush) {
-        return -1;
-      } else if (a_lastpush < b_lastpush) {
-        return 1;
-      } else {
-        return 0;
-      }
-    });
+// Get recent repos
+var pickRecent = function(data) {
+  // Most recent date comes first
+  // This means highest #
+  // aka sorting by DESC
+  return data.sort(function(a, b) {
+    var a_lastpush = a["pushed_at"];
+    var b_lastpush = b["pushed_at"];
+    if (a_lastpush > b_lastpush) {
+      return -1;
+    } else if (a_lastpush < b_lastpush) {
+      return 1;
+    } else {
+      return 0;
+    }
+  }).slice(0,5);
+};
 
-    // Get first 5
-    var latest = data.slice(0, 5).map(function(a) {
-      return {
-        name: a["name"],
-        commits: []
-      }
-    });
-
-    // Prepare requests
-    var commitRequests = [];
-
-    for (var i = 0; i < latest.length; i++) {
-      commitRequests.push(function(repo) {
-        return function(callback) {
-          var name = repo["name"];
-          var options = {
-            url: 'https://api.github.com/repos/linstantnoodles/' + name + '/stats/contributors',
-            headers: {
-              'User-Agent': 'schedule'
-            }
-          };
-          req(options, function(error, res, body) {
-            var data = JSON.parse(body);
-            var totalCommits = getTotalCommits(data);
-            repo["total"] = totalCommits;
-          });
+var getCommitData = function(latest, callback) {
+  // Prepare requests
+  var commitRequests = [];
+  for (var i = 0; i < latest.length; i++) {
+    commitRequests.push(function(repo) {
+      return function(callback) {
+        var name = repo["name"];
+        var options = {
+          url: 'https://api.github.com/repos/linstantnoodles/' + name + '/stats/contributors',
+          headers: {
+            'User-Agent': 'schedule'
+          }
         };
-      }(latest[i]));
-    };
-    async.parallel(commitRequests, function(err, results) {
-      // Sort by commit
-      var target = latest.sort(function(a, b) {
-        return a["total"] - b["total"];
-      }).pop();
-
-      // Get the schedule
-      var options = {
-        url: 'https://api.github.com/repos/linstantnoodles/' + target["name"] + '/stats/punch_card',
-        headers: {
-          'User-Agent': 'schedule'
-        }
+        req(options, function(error, res, body) {
+          var data = JSON.parse(body);
+          var totalCommits = getTotalCommits(data);
+          repo["total"] = totalCommits;
+          callback(null, data);
+        });
       };
-      req(options, function(error, res, body) {
-        var data = JSON.parse(body);
-        // Profit
-        console.log(data);
-      });
+    }(latest[i]));
+  };
+  async.parallel(commitRequests, callback);
+};
 
-    });
-  } else {
+// Fire request
+req(options, function(error, res, body) {
+  if (error || res.statusCode != 200) {
     console.log(res);
+    return;
   }
+  // Get recent repos
+  var latest = pickRecent(JSON.parse(body));
+  getCommitData(latest, function(err, results) {
+    // Sort by commit
+    var target = latest.sort(function(a, b) {
+      return a["total"] - b["total"];
+    }).pop();
+    // Get the schedule
+    var options = {
+      url: 'https://api.github.com/repos/linstantnoodles/' + target["name"] + '/stats/punch_card',
+      headers: {
+        'User-Agent': 'schedule'
+      }
+    };
+
+    req(options, function(error, res, body) {
+      if (error || res.statusCode != 200) {
+        console.log(res);
+        return;
+      }
+
+      console.log("Based on repo: " + target["name"]);
+      var data = JSON.parse(body);
+      console.log(data);
+    });
+  });
 });
