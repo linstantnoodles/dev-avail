@@ -3,7 +3,7 @@ var req = require("request"),
 
 // User repos
 var options = {
-    url: 'https://api.github.com/users/linstantnoodles/repos',
+    url: 'https://api.github.com/users/linstantnoodles/repos?per_page=200',
     headers: {
         'User-Agent': 'schedule'
     }
@@ -32,7 +32,11 @@ var pickRecent = function(data) {
     } else {
       return 0;
     }
-  }).slice(0,5);
+  }).slice(0,5).map(function(a) {
+    return {
+      name: a["name"]
+    }
+  });
 };
 
 var getCommitData = function(latest, callback) {
@@ -70,6 +74,7 @@ req(options, function(error, res, body) {
   var latest = pickRecent(JSON.parse(body));
   getCommitData(latest, function(err, results) {
     // Sort by commit
+    console.log(latest);
     var target = latest.sort(function(a, b) {
       return a["total"] - b["total"];
     }).pop();
